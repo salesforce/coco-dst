@@ -59,7 +59,7 @@ For any questions, feel free to open issues, or shoot emails to
 - [Shiyang Li](http://shiyangli.me/)
 
 ## License
-The code is released under MIT license - see [LICENSE](LICENSE.txt) for details. 
+The code is released under BSD 3-Clause - see [LICENSE](LICENSE.txt) for details.
 
 This code includes other open source software components: 
 [trade-dst](https://github.com/jasonwu0731/trade-dst), 

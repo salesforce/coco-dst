@@ -107,4 +107,4 @@ OR, if you prefer to use the additional training data we already generated
 2. Place the resulting ```coco_data``` folder under the current module (```coco-dst/coco-dst/```).
 
 ## License
-The code is released under the MIT License - see [LICENSE](LICENSE.txt) for details
+The code is released under BSD 3-Clause - see [LICENSE](LICENSE.txt) for details.
