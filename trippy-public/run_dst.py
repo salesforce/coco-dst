@@ -46,7 +46,7 @@ from tensorlistdataset import (TensorListDataset)
 
 logger = logging.getLogger(__name__)
 
-#ALL_MODELS = tuple(BertConfig.pretrained_config_archive_map.keys())
+# ALL_MODELS = tuple(BertConfig.pretrained_config_archive_map.keys())
 
 MODEL_CLASSES = {
     'bert': (BertConfig, BertForDST, BertTokenizer),
@@ -60,7 +60,7 @@ def set_seed(args):
     if args.n_gpu > 0:
         torch.cuda.manual_seed_all(args.seed)
 
-        
+
 def to_list(tensor):
     return tensor.detach().cpu().tolist()
 
@@ -98,11 +98,13 @@ def train(args, train_dataset, features, model, tokenizer, processor, continue_f
     # Prepare optimizer and schedule (linear warmup and decay)
     no_decay = ['bias', 'LayerNorm.weight']
     optimizer_grouped_parameters = [
-        {'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)], 'weight_decay': args.weight_decay},
+        {'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+         'weight_decay': args.weight_decay},
         {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
     ]
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
-    scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=t_total)
+    scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=num_warmup_steps,
+                                                num_training_steps=t_total)
     if args.fp16:
         try:
             from apex import amp
@@ -127,14 +129,16 @@ def train(args, train_dataset, features, model, tokenizer, processor, continue_f
     logger.info("  Num Epochs = %d", args.num_train_epochs)
     logger.info("  Instantaneous batch size per GPU = %d", args.per_gpu_train_batch_size)
     logger.info("  Total train batch size (w. parallel, distributed & accumulation) = %d",
-                args.train_batch_size * args.gradient_accumulation_steps * (torch.distributed.get_world_size() if args.local_rank != -1 else 1))
+                args.train_batch_size * args.gradient_accumulation_steps * (
+                    torch.distributed.get_world_size() if args.local_rank != -1 else 1))
     logger.info("  Gradient Accumulation steps = %d", args.gradient_accumulation_steps)
     logger.info("  Total optimization steps = %d", t_total)
     logger.info("  Warmup steps = %d", num_warmup_steps)
 
     if continue_from_global_step > 0:
-        logger.info("Fast forwarding to global step %d to resume training from latest checkpoint...", continue_from_global_step)
-    
+        logger.info("Fast forwarding to global step %d to resume training from latest checkpoint...",
+                    continue_from_global_step)
+
     global_step = 0
     tr_loss, logging_loss = 0.0, 0.0
     model.zero_grad()
@@ -157,20 +161,20 @@ def train(args, train_dataset, features, model, tokenizer, processor, continue_f
             batch = batch_to_device(batch, args.device)
 
             # This is what is forwarded to the "forward" def.
-            inputs = {'input_ids':       batch[0],
-                      'input_mask':      batch[1], 
-                      'segment_ids':     batch[2],
-                      'start_pos':       batch[3],
-                      'end_pos':         batch[4],
-                      'inform_slot_id':  batch[5],
-                      'refer_id':        batch[6],
-                      'diag_state':      batch[7],
-                      'class_label_id':  batch[8]}
+            inputs = {'input_ids': batch[0],
+                      'input_mask': batch[1],
+                      'segment_ids': batch[2],
+                      'start_pos': batch[3],
+                      'end_pos': batch[4],
+                      'inform_slot_id': batch[5],
+                      'refer_id': batch[6],
+                      'diag_state': batch[7],
+                      'class_label_id': batch[8]}
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
 
             if args.n_gpu > 1:
-                loss = loss.mean() # mean() to average on multi-gpu parallel (not distributed) training
+                loss = loss.mean()  # mean() to average on multi-gpu parallel (not distributed) training
             if args.gradient_accumulation_steps > 1:
                 loss = loss / args.gradient_accumulation_steps
 
@@ -200,7 +204,8 @@ def train(args, train_dataset, features, model, tokenizer, processor, continue_f
                     output_dir = os.path.join(args.output_dir, 'checkpoint-{}'.format(global_step))
                     if not os.path.exists(output_dir):
                         os.makedirs(output_dir)
-                    model_to_save = model.module if hasattr(model, 'module') else model  # Take care of distributed/parallel training
+                    model_to_save = model.module if hasattr(model,
+                                                            'module') else model  # Take care of distributed/parallel training
                     model_to_save.save_pretrained(output_dir)
                     torch.save(args, os.path.join(output_dir, 'training_args.bin'))
                     logger.info("Saving model checkpoint to %s", output_dir)
@@ -231,7 +236,7 @@ def evaluate(args, model, tokenizer, processor, prefix=""):
         os.makedirs(args.output_dir)
 
     args.eval_batch_size = args.per_gpu_eval_batch_size
-    eval_sampler = SequentialSampler(dataset) # Note that DistributedSampler samples randomly
+    eval_sampler = SequentialSampler(dataset)  # Note that DistributedSampler samples randomly
     eval_dataloader = DataLoader(dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
 
     # Eval!
@@ -242,7 +247,8 @@ def evaluate(args, model, tokenizer, processor, prefix=""):
     all_preds = []
     ds = {slot: 'none' for slot in model.slot_list}
     with torch.no_grad():
-        diag_state = {slot: torch.tensor([0 for _ in range(args.eval_batch_size)]).to(args.device) for slot in model.slot_list}
+        diag_state = {slot: torch.tensor([0 for _ in range(args.eval_batch_size)]).to(args.device) for slot in
+                      model.slot_list}
     for batch in tqdm(eval_dataloader, desc="Evaluating"):
         model.eval()
         batch = batch_to_device(batch, args.device)
@@ -255,15 +261,15 @@ def evaluate(args, model, tokenizer, processor, prefix=""):
                 diag_state[slot][i] = 0
 
         with torch.no_grad():
-            inputs = {'input_ids':       batch[0],
-                      'input_mask':      batch[1],
-                      'segment_ids':     batch[2],
-                      'start_pos':       batch[3],
-                      'end_pos':         batch[4],
-                      'inform_slot_id':  batch[5],
-                      'refer_id':        batch[6],
-                      'diag_state':      diag_state,
-                      'class_label_id':  batch[8]}
+            inputs = {'input_ids': batch[0],
+                      'input_mask': batch[1],
+                      'segment_ids': batch[2],
+                      'start_pos': batch[3],
+                      'end_pos': batch[4],
+                      'inform_slot_id': batch[5],
+                      'refer_id': batch[6],
+                      'diag_state': diag_state,
+                      'class_label_id': batch[8]}
             unique_ids = [features[i.item()].guid for i in batch[9]]
             values = [features[i.item()].values for i in batch[9]]
             input_ids_unmasked = [features[i.item()].input_ids_unmasked for i in batch[9]]
@@ -278,11 +284,12 @@ def evaluate(args, model, tokenizer, processor, prefix=""):
                         diag_state[slot][i] = u
 
         results = eval_metric(model, inputs, outputs[0], outputs[1], outputs[2], outputs[3], outputs[4], outputs[5])
-        preds, ds = predict_and_format(model, tokenizer, inputs, outputs[2], outputs[3], outputs[4], outputs[5], unique_ids, input_ids_unmasked, values, inform, prefix, ds)
+        preds, ds = predict_and_format(model, tokenizer, inputs, outputs[2], outputs[3], outputs[4], outputs[5],
+                                       unique_ids, input_ids_unmasked, values, inform, prefix, ds)
         all_results.append(results)
         all_preds.append(preds)
 
-    all_preds = [item for sublist in all_preds for item in sublist] # Flatten list
+    all_preds = [item for sublist in all_preds for item in sublist]  # Flatten list
 
     # Generate final results
     final_results = {}
@@ -297,7 +304,8 @@ def evaluate(args, model, tokenizer, processor, prefix=""):
     return final_results
 
 
-def eval_metric(model, features, total_loss, per_slot_per_example_loss, per_slot_class_logits, per_slot_start_logits, per_slot_end_logits, per_slot_refer_logits):
+def eval_metric(model, features, total_loss, per_slot_per_example_loss, per_slot_class_logits, per_slot_start_logits,
+                per_slot_end_logits, per_slot_refer_logits):
     metric_dict = {}
     per_slot_correctness = {}
     for slot in model.slot_list:
@@ -330,7 +338,8 @@ def eval_metric(model, features, total_loss, per_slot_per_example_loss, per_slot
         if math.isnan(token_accuracy):
             token_accuracy = torch.tensor(1.0, device=token_accuracy.device)
 
-        token_is_referrable = torch.eq(class_label_id, model.class_types.index('refer') if 'refer' in model.class_types else -1).float()
+        token_is_referrable = torch.eq(class_label_id,
+                                       model.class_types.index('refer') if 'refer' in model.class_types else -1).float()
         _, refer_prediction = refer_logits.max(1)
         refer_correctness = torch.eq(refer_prediction, refer_id).float()
         refer_accuracy = refer_correctness.sum() / token_is_referrable.sum()
@@ -338,8 +347,9 @@ def eval_metric(model, features, total_loss, per_slot_per_example_loss, per_slot
         # The accuracy therefore is 1 by default. -> replace NaNs
         if math.isnan(refer_accuracy) or math.isinf(refer_accuracy):
             refer_accuracy = torch.tensor(1.0, device=refer_accuracy.device)
-            
-        total_correctness = class_correctness * (token_is_pointable * token_correctness + (1 - token_is_pointable)) * (token_is_referrable * refer_correctness + (1 - token_is_referrable))
+
+        total_correctness = class_correctness * (token_is_pointable * token_correctness + (1 - token_is_pointable)) * (
+                token_is_referrable * refer_correctness + (1 - token_is_referrable))
         total_accuracy = total_correctness.mean()
 
         loss = per_example_loss.mean()
@@ -357,7 +367,8 @@ def eval_metric(model, features, total_loss, per_slot_per_example_loss, per_slot
     return metric_dict
 
 
-def predict_and_format(model, tokenizer, features, per_slot_class_logits, per_slot_start_logits, per_slot_end_logits, per_slot_refer_logits, ids, input_ids_unmasked, values, inform, prefix, ds):
+def predict_and_format(model, tokenizer, features, per_slot_class_logits, per_slot_start_logits, per_slot_end_logits,
+                       per_slot_refer_logits, ids, input_ids_unmasked, values, inform, prefix, ds):
     prediction_list = []
     dialog_state = ds
     for i in range(len(ids)):
@@ -377,7 +388,7 @@ def predict_and_format(model, tokenizer, features, per_slot_class_logits, per_sl
             start_pos = int(features['start_pos'][slot][i])
             end_pos = int(features['end_pos'][slot][i])
             refer_id = int(features['refer_id'][slot][i])
-            
+
             class_prediction = int(class_logits.argmax())
             start_prediction = int(start_logits.argmax())
             end_prediction = int(end_logits.argmax())
@@ -416,7 +427,7 @@ def predict_and_format(model, tokenizer, features, per_slot_class_logits, per_sl
         for slot in model.slot_list:
             class_logits = per_slot_class_logits[slot][i]
             refer_logits = per_slot_refer_logits[slot][i]
-            
+
             class_prediction = int(class_logits.argmax())
             refer_prediction = int(refer_logits.argmax())
 
@@ -426,11 +437,11 @@ def predict_and_format(model, tokenizer, features, per_slot_class_logits, per_sl
                 # This phenomenon is however currently not properly covered in the training data
                 # label generation process.
                 dialog_state[slot] = dialog_state[model.slot_list[refer_prediction - 1]]
-                prediction_addendum['slot_prediction_%s' % slot] = dialog_state[slot] # Value update
+                prediction_addendum['slot_prediction_%s' % slot] = dialog_state[slot]  # Value update
 
         prediction.update(prediction_addendum)
         prediction_list.append(prediction)
-        
+
     return prediction_list, dialog_state
 
 
@@ -441,7 +452,7 @@ def load_and_cache_examples(args, model, tokenizer, processor, evaluate=False):
     # Load data features from cache or dataset file
     cached_file = os.path.join(args.output_dir, 'cached_{}_features'.format(
         args.predict_type if evaluate else 'train'))
-    if os.path.exists(cached_file) and not args.overwrite_cache: # and not output_examples:
+    if os.path.exists(cached_file) and not args.overwrite_cache:  # and not output_examples:
         logger.info("Loading features from cached file %s", cached_file)
         features = torch.load(cached_file)
     else:
@@ -452,11 +463,14 @@ def load_and_cache_examples(args, model, tokenizer, processor, evaluate=False):
                           'label_value_repetitions': args.label_value_repetitions,
                           'delexicalize_sys_utts': args.delexicalize_sys_utts}
         if evaluate and args.predict_type == "dev":
+            processor_args["subset_dialog_file"] = ""
             examples = processor.get_dev_examples(args.data_dir, processor_args)
         elif evaluate and args.predict_type == "test":
+            processor_args["subset_dialog_file"] = ""
             examples = processor.get_test_examples(args.data_dir, processor_args)
         else:
-            examples = processor.get_train_examples(args.data_dir, args.aug_file , processor_args)
+            processor_args["subset_dialog_file"] = args.subset_dialog_file
+            examples = processor.get_train_examples(args.data_dir, args.aug_file, processor_args)
         features = convert_examples_to_features(examples=examples,
                                                 slot_list=model.slot_list,
                                                 class_types=model.class_types,
@@ -523,7 +537,8 @@ def main():
                         help="Path to pre-trained model or shortcut name selected in the list")
     parser.add_argument("--output_dir", default=None, type=str, required=True,
                         help="The output directory where the model checkpoints and predictions will be written.")
-
+    parser.add_argument("--subset_dialog_file", default="", type=str,
+                        help="The subset dialog file used in CoCo.")
     # Other parameters
     parser.add_argument("--aug_file", default="", type=str,
                         help="aug_file for retraining")
@@ -622,11 +637,11 @@ def main():
 
     args = parser.parse_args()
 
-    assert(args.warmup_proportion >= 0.0 and args.warmup_proportion <= 1.0)
-    assert(args.svd >= 0.0 and args.svd <= 1.0)
-    assert(args.class_aux_feats_ds is False or args.per_gpu_eval_batch_size == 1)
-    assert(not args.class_aux_feats_inform or args.per_gpu_eval_batch_size == 1)
-    assert(not args.class_aux_feats_ds or args.per_gpu_eval_batch_size == 1)
+    assert (args.warmup_proportion >= 0.0 and args.warmup_proportion <= 1.0)
+    assert (args.svd >= 0.0 and args.svd <= 1.0)
+    assert (args.class_aux_feats_ds is False or args.per_gpu_eval_batch_size == 1)
+    assert (not args.class_aux_feats_inform or args.per_gpu_eval_batch_size == 1)
+    assert (not args.class_aux_feats_ds or args.per_gpu_eval_batch_size == 1)
 
     task_name = args.task_name.lower()
     if task_name not in PROCESSORS:
@@ -649,9 +664,9 @@ def main():
     args.device = device
 
     # Setup logging
-    logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
-                        datefmt = '%m/%d/%Y %H:%M:%S',
-                        level = logging.INFO if args.local_rank in [-1, 0] else logging.WARN)
+    logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
+                        datefmt='%m/%d/%Y %H:%M:%S',
+                        level=logging.INFO if args.local_rank in [-1, 0] else logging.WARN)
     logger.warning("Process rank: %s, device: %s, n_gpu: %s, distributed training: %s, 16-bits training: %s",
                    args.local_rank, device, args.n_gpu, bool(args.local_rank != -1), args.fp16)
 
@@ -678,8 +693,10 @@ def main():
     config.dst_class_types = dst_class_types
     config.dst_class_labels = dst_class_labels
 
-    tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path, do_lower_case=args.do_lower_case)
-    model = model_class.from_pretrained(args.model_name_or_path, from_tf=bool('.ckpt' in args.model_name_or_path), config=config)
+    tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
+                                                do_lower_case=args.do_lower_case)
+    model = model_class.from_pretrained(args.model_name_or_path, from_tf=bool('.ckpt' in args.model_name_or_path),
+                                        config=config)
 
     logger.info("Updated model config: %s" % config)
 
@@ -693,18 +710,21 @@ def main():
     # Training
     if args.do_train:
         # If output files already exists, assume to continue training from latest checkpoint (unless overwrite_output_dir is set)
-        continue_from_global_step = 0 # If set to 0, start training from the beginning
-        if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train and not args.overwrite_output_dir:
-            checkpoints = list(os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + '/*/' + WEIGHTS_NAME, recursive=True)))
+        continue_from_global_step = 0  # If set to 0, start training from the beginning
+        if os.path.exists(args.output_dir) and os.listdir(
+                args.output_dir) and args.do_train and not args.overwrite_output_dir:
+            checkpoints = list(
+                os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + '/*/' + WEIGHTS_NAME, recursive=True)))
             if len(checkpoints) > 0:
                 checkpoint = checkpoints[-1]
                 logger.info("Resuming training from the latest checkpoint: %s", checkpoint)
                 continue_from_global_step = int(checkpoint.split('-')[-1])
                 model = model_class.from_pretrained(checkpoint)
                 model.to(args.device)
-        
+
         train_dataset, features = load_and_cache_examples(args, model, tokenizer, processor, evaluate=False)
-        global_step, tr_loss = train(args, train_dataset, features, model, tokenizer, processor, continue_from_global_step)
+        global_step, tr_loss = train(args, train_dataset, features, model, tokenizer, processor,
+                                     continue_from_global_step)
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
 
     # Save the trained model and the tokenizer
@@ -716,7 +736,8 @@ def main():
         logger.info("Saving model checkpoint to %s", args.output_dir)
         # Save a trained model, configuration and tokenizer using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`
-        model_to_save = model.module if hasattr(model, 'module') else model  # Take care of distributed/parallel training
+        model_to_save = model.module if hasattr(model,
+                                                'module') else model  # Take care of distributed/parallel training
         model_to_save.save_pretrained(args.output_dir)
         tokenizer.save_pretrained(args.output_dir)
 
@@ -734,7 +755,8 @@ def main():
         output_eval_file = os.path.join(args.output_dir, "eval_res.%s.json" % (args.predict_type))
         checkpoints = [args.output_dir]
         if args.eval_all_checkpoints:
-            checkpoints = list(os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + '/**/' + WEIGHTS_NAME, recursive=True)))
+            checkpoints = list(
+                os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + '/**/' + WEIGHTS_NAME, recursive=True)))
             logging.getLogger("pytorch_transformers.modeling_utils").setLevel(logging.WARN)  # Reduce model loading logs
 
         logger.info("Evaluate the following checkpoints: %s", checkpoints)

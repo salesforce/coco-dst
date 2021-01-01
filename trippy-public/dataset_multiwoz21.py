@@ -21,7 +21,7 @@ import json
 import re
 from tqdm import tqdm
 from utils_dst import (DSTExample, convert_to_unicode)
-
+import random
 
 # Required for mapping slot names in dialogue_acts.json file
 # to proper designations.
@@ -46,10 +46,9 @@ ACTS_DICT = {'taxi-depart': 'taxi-departure',
              'booking-day': 'booking-book_day',
              'booking-stay': 'booking-book_stay',
              'booking-time': 'booking-book_time',
-}
+             }
 
-
-LABEL_MAPS = {} # Loaded from file
+LABEL_MAPS = {}  # Loaded from file
 
 
 # Loads the dialogue_acts.json and returns a list
@@ -79,20 +78,24 @@ def load_acts(input_file):
                             if key not in s_dict:
                                 s_dict[key] = list([v])
                             # ... Option 2: Keep last informed value
-                            #s_dict[key] = list([v])
+                            # s_dict[key] = list([v])
     return s_dict
 
 
 def normalize_time(text):
-    text = re.sub("(\d{1})(a\.?m\.?|p\.?m\.?)", r"\1 \2", text) # am/pm without space
-    text = re.sub("(^| )(\d{1,2}) (a\.?m\.?|p\.?m\.?)", r"\1\2:00 \3", text) # am/pm short to long form
-    text = re.sub("(^| )(at|from|by|until|after) ?(\d{1,2}) ?(\d{2})([^0-9]|$)", r"\1\2 \3:\4\5", text) # Missing separator
-    text = re.sub("(^| )(\d{2})[;.,](\d{2})", r"\1\2:\3", text) # Wrong separator
-    text = re.sub("(^| )(at|from|by|until|after) ?(\d{1,2})([;., ]|$)", r"\1\2 \3:00\4", text) # normalize simple full hour time
-    text = re.sub("(^| )(\d{1}:\d{2})", r"\g<1>0\2", text) # Add missing leading 0
+    text = re.sub("(\d{1})(a\.?m\.?|p\.?m\.?)", r"\1 \2", text)  # am/pm without space
+    text = re.sub("(^| )(\d{1,2}) (a\.?m\.?|p\.?m\.?)", r"\1\2:00 \3", text)  # am/pm short to long form
+    text = re.sub("(^| )(at|from|by|until|after) ?(\d{1,2}) ?(\d{2})([^0-9]|$)", r"\1\2 \3:\4\5",
+                  text)  # Missing separator
+    text = re.sub("(^| )(\d{2})[;.,](\d{2})", r"\1\2:\3", text)  # Wrong separator
+    text = re.sub("(^| )(at|from|by|until|after) ?(\d{1,2})([;., ]|$)", r"\1\2 \3:00\4",
+                  text)  # normalize simple full hour time
+    text = re.sub("(^| )(\d{1}:\d{2})", r"\g<1>0\2", text)  # Add missing leading 0
     # Map 12 hour times to 24 hour times
-    text = re.sub("(\d{2})(:\d{2}) ?p\.?m\.?", lambda x: str(int(x.groups()[0]) + 12 if int(x.groups()[0]) < 12 else int(x.groups()[0])) + x.groups()[1], text)
-    text = re.sub("(^| )24:(\d{2})", r"\g<1>00:\2", text) # Correct times that use 24 as hour
+    text = re.sub("(\d{2})(:\d{2}) ?p\.?m\.?",
+                  lambda x: str(int(x.groups()[0]) + 12 if int(x.groups()[0]) < 12 else int(x.groups()[0])) +
+                            x.groups()[1], text)
+    text = re.sub("(^| )24:(\d{2})", r"\g<1>00:\2", text)  # Correct times that use 24 as hour
     return text
 
 
@@ -105,10 +108,10 @@ def normalize_text(text):
     text = re.sub("(^| )three(-| )star([s.,? ]|$)", r"\g<1>3 star\3", text)
     text = re.sub("(^| )four(-| )star([s.,? ]|$)", r"\g<1>4 star\3", text)
     text = re.sub("(^| )five(-| )star([s.,? ]|$)", r"\g<1>5 star\3", text)
-    text = re.sub("archaelogy", "archaeology", text) # Systematic typo
-    text = re.sub("guesthouse", "guest house", text) # Normalization
-    text = re.sub("(^| )b ?& ?b([.,? ]|$)", r"\1bed and breakfast\2", text) # Normalization
-    text = re.sub("bed & breakfast", "bed and breakfast", text) # Normalization
+    text = re.sub("archaelogy", "archaeology", text)  # Systematic typo
+    text = re.sub("guesthouse", "guest house", text)  # Normalization
+    text = re.sub("(^| )b ?& ?b([.,? ]|$)", r"\1bed and breakfast\2", text)  # Normalization
+    text = re.sub("bed & breakfast", "bed and breakfast", text)  # Normalization
     return text
 
 
@@ -151,7 +154,7 @@ def get_token_pos(tok_list, value_label):
     len_label = len(label_list)
     for i in range(len(tok_list) + 1 - len_label):
         if tok_list[i:i + len_label] == label_list:
-            find_pos.append((i, i + len_label)) # start, exclusive_end
+            find_pos.append((i, i + len_label))  # start, exclusive_end
             found = True
     return found, find_pos
 
@@ -203,7 +206,7 @@ def is_in_list(tok, value):
             found = True
             break
     return found
- 
+
 
 def delex_utt(utt, values):
     utt_norm = tokenize(utt)
@@ -303,7 +306,8 @@ def create_examples(input_file, acts_file, set_type, slot_list,
                     swap_utterances=False,
                     label_value_repetitions=False,
                     delexicalize_sys_utts=False,
-                    analyze=False):
+                    analyze=False,
+                    subset_dialog_file=""):
     """Read a DST json file into a list of DSTExample."""
 
     sys_inform_dict = load_acts(acts_file)
@@ -311,12 +315,23 @@ def create_examples(input_file, acts_file, set_type, slot_list,
     with open(input_file, "r", encoding='utf-8') as reader:
         input_data = json.load(reader)
 
+    if (subset_dialog_file):
+        train_data = {}
+        with open(subset_dialog_file, "r", encoding='utf-8') as reader:
+            subset_dialog = json.load(reader)
+        for turn_meta_data in subset_dialog:
+            dial_ID = turn_meta_data["dialogue_idx"]
+            if ((dial_ID not in train_data) and (
+                    dial_ID in input_data)):  # (dial_ID not in train_data) should be removed?
+                train_data[dial_ID] = input_data[dial_ID]
+    else:
+        train_data = input_data
+
     global LABEL_MAPS
     LABEL_MAPS = label_maps
-
     examples = []
-    for dialog_id in tqdm(input_data):
-        entry = input_data[dialog_id]
+    for dialog_id in tqdm(train_data):
+        entry = train_data[dialog_id]
         utterances = entry['log']
 
         # Collects all slot changes throughout the dialog
@@ -347,9 +362,9 @@ def create_examples(input_file, acts_file, set_type, slot_list,
                 for slot in slot_list:
                     if (str(dialog_id), str(turn_itr), slot) in sys_inform_dict:
                         inform_dict[slot] = sys_inform_dict[(str(dialog_id), str(turn_itr), slot)]
-                utt_tok_list.append(delex_utt(utt['text'], inform_dict)) # normalize utterances
+                utt_tok_list.append(delex_utt(utt['text'], inform_dict))  # normalize utterances
             else:
-                utt_tok_list.append(tokenize(utt['text'])) # normalize utterances
+                utt_tok_list.append(tokenize(utt['text']))  # normalize utterances
 
             modified_slots = {}
 
@@ -361,12 +376,12 @@ def create_examples(input_file, acts_file, set_type, slot_list,
                     # Check the booked section
                     if booked != []:
                         for s in booked[0]:
-                            booked_slots[s] = normalize_label('%s-%s' % (d, s), booked[0][s]) # normalize labels
+                            booked_slots[s] = normalize_label('%s-%s' % (d, s), booked[0][s])  # normalize labels
                     # Check the semi and the inform slots
                     for category in ['book', 'semi']:
                         for s in utt['metadata'][d][category]:
                             cs = '%s-book_%s' % (d, s) if category == 'book' else '%s-%s' % (d, s)
-                            value_label = normalize_label(cs, utt['metadata'][d][category][s]) # normalize labels
+                            value_label = normalize_label(cs, utt['metadata'][d][category][s])  # normalize labels
                             # Prefer the slot value as stored in the booked section
                             if s in booked_slots:
                                 value_label = booked_slots[s]
@@ -428,9 +443,11 @@ def create_examples(input_file, acts_file, set_type, slot_list,
                 # Get dialog act annotations
                 inform_label = list(['none'])
                 if (str(dialog_id), str(turn_itr), slot) in sys_inform_dict:
-                    inform_label = list([normalize_label(slot, i) for i in sys_inform_dict[(str(dialog_id), str(turn_itr), slot)]])
+                    inform_label = list(
+                        [normalize_label(slot, i) for i in sys_inform_dict[(str(dialog_id), str(turn_itr), slot)]])
                 elif (str(dialog_id), str(turn_itr), 'booking-' + slot.split('-')[1]) in sys_inform_dict:
-                    inform_label = list([normalize_label(slot, i) for i in sys_inform_dict[(str(dialog_id), str(turn_itr), 'booking-' + slot.split('-')[1])]])
+                    inform_label = list([normalize_label(slot, i) for i in sys_inform_dict[
+                        (str(dialog_id), str(turn_itr), 'booking-' + slot.split('-')[1])]])
 
                 (informed_value,
                  referred_slot,
@@ -466,12 +483,15 @@ def create_examples(input_file, acts_file, set_type, slot_list,
                 if append_history:
                     if use_history_labels:
                         if swap_utterances:
-                            new_hst_utt_tok_label_dict[slot] = usr_utt_tok_label + sys_utt_tok_label + new_hst_utt_tok_label_dict[slot]
+                            new_hst_utt_tok_label_dict[slot] = usr_utt_tok_label + sys_utt_tok_label + \
+                                                               new_hst_utt_tok_label_dict[slot]
                         else:
-                            new_hst_utt_tok_label_dict[slot] = sys_utt_tok_label + usr_utt_tok_label + new_hst_utt_tok_label_dict[slot]
+                            new_hst_utt_tok_label_dict[slot] = sys_utt_tok_label + usr_utt_tok_label + \
+                                                               new_hst_utt_tok_label_dict[slot]
                     else:
-                        new_hst_utt_tok_label_dict[slot] = [0 for _ in sys_utt_tok_label + usr_utt_tok_label + new_hst_utt_tok_label_dict[slot]]
-                    
+                        new_hst_utt_tok_label_dict[slot] = [0 for _ in sys_utt_tok_label + usr_utt_tok_label +
+                                                            new_hst_utt_tok_label_dict[slot]]
+
                 # For now, we map all occurences of unpointable slot values
                 # to none. However, since the labels will still suggest
                 # a presence of unpointable slot values, the task of the
@@ -483,7 +503,8 @@ def create_examples(input_file, acts_file, set_type, slot_list,
                     if analyze:
                         if slot not in diag_seen_slots_dict or value_label != diag_seen_slots_value_dict[slot]:
                             print("(%s): %s, " % (slot, value_label), end='')
-                elif slot in diag_seen_slots_dict and class_type == diag_seen_slots_dict[slot] and class_type != 'copy_value' and class_type != 'inform':
+                elif slot in diag_seen_slots_dict and class_type == diag_seen_slots_dict[
+                    slot] and class_type != 'copy_value' and class_type != 'inform':
                     # If slot has seen before and its class type did not change, label this slot a not present,
                     # assuming that the slot has not actually been mentioned in this turn.
                     # Exceptions are copy_value and inform. If a seen slot has been tagged as copy_value or inform,
@@ -536,7 +557,6 @@ def create_examples(input_file, acts_file, set_type, slot_list,
             hst_utt_tok_label_dict = new_hst_utt_tok_label_dict.copy()
             diag_state = new_diag_state.copy()
 
-
             turn_itr += 1
 
         if analyze:
@@ -545,66 +565,64 @@ def create_examples(input_file, acts_file, set_type, slot_list,
     return examples
 
 
-
 def create_aug_examples(input_file, acts_file, set_type, slot_list,
-                    label_maps={},
-                    aug_file = "",
-                    append_history=False,
-                    use_history_labels=False,
-                    swap_utterances=False,
-                    label_value_repetitions=False,
-                    delexicalize_sys_utts=False,
-                    analyze=False):
-
+                        label_maps={},
+                        aug_file="",
+                        append_history=False,
+                        use_history_labels=False,
+                        swap_utterances=False,
+                        label_value_repetitions=False,
+                        delexicalize_sys_utts=False,
+                        analyze=False,
+                        subset_dialog_file=""):
     examples = create_examples(input_file, acts_file, set_type, slot_list,
-                    label_maps=label_maps,
-                    append_history=append_history,
-                    use_history_labels=use_history_labels,
-                    swap_utterances=swap_utterances,
-                    label_value_repetitions=label_value_repetitions,
-                    delexicalize_sys_utts=delexicalize_sys_utts,
-                    analyze=analyze)
+                               label_maps=label_maps,
+                               append_history=append_history,
+                               use_history_labels=use_history_labels,
+                               swap_utterances=swap_utterances,
+                               label_value_repetitions=label_value_repetitions,
+                               delexicalize_sys_utts=delexicalize_sys_utts,
+                               analyze=analyze,
+                               subset_dialog_file=subset_dialog_file)
 
-
-    DOMAIN_ALIGN = { 'attraction-area':"attraction-area",
-                             'attraction-name':"attraction-name",
-                             'attraction-type':"attraction-type",
-                             'hotel-area':"hotel-area",
-                             'hotel-book day':"hotel-book_day",
-                             'hotel-book people':"hotel-book_people",
-                             'hotel-book stay':"hotel-book_stay",
-                             'hotel-internet':"hotel-internet",
-                             'hotel-name':"hotel-name",
-                             'hotel-parking':"hotel-parking",
-                             'hotel-pricerange':"hotel-pricerange",
-                             'hotel-stars':"hotel-stars", 
-                             'hotel-type':"hotel-type",
-                             'restaurant-area':"restaurant-area",
-                             'restaurant-book day':"restaurant-book_day",
-                             'restaurant-book people':"restaurant-book_people",
-                             'restaurant-book time':"restaurant-book_time",
-                             'restaurant-food': "restaurant-food",
-                             'restaurant-name':"restaurant-name",
-                             'restaurant-pricerange':"restaurant-pricerange",
-                             'taxi-arriveby':"taxi-arriveBy",
-                             'taxi-departure': 'taxi-departure',
-                             'taxi-destination':'taxi-destination',
-                             'taxi-leaveat':"taxi-leaveAt",
-                             'train-arriveby':"train-arriveBy",
-                             'train-book people':"train-book_people",
-                             'train-day':'train-day',
-                             'train-departure':"train-departure",
-                             'train-destination':"train-destination",
-                             'train-leaveat':"train-leaveAt"}
+    DOMAIN_ALIGN = {'attraction-area': "attraction-area",
+                    'attraction-name': "attraction-name",
+                    'attraction-type': "attraction-type",
+                    'hotel-area': "hotel-area",
+                    'hotel-book day': "hotel-book_day",
+                    'hotel-book people': "hotel-book_people",
+                    'hotel-book stay': "hotel-book_stay",
+                    'hotel-internet': "hotel-internet",
+                    'hotel-name': "hotel-name",
+                    'hotel-parking': "hotel-parking",
+                    'hotel-pricerange': "hotel-pricerange",
+                    'hotel-stars': "hotel-stars",
+                    'hotel-type': "hotel-type",
+                    'restaurant-area': "restaurant-area",
+                    'restaurant-book day': "restaurant-book_day",
+                    'restaurant-book people': "restaurant-book_people",
+                    'restaurant-book time': "restaurant-book_time",
+                    'restaurant-food': "restaurant-food",
+                    'restaurant-name': "restaurant-name",
+                    'restaurant-pricerange': "restaurant-pricerange",
+                    'taxi-arriveby': "taxi-arriveBy",
+                    'taxi-departure': 'taxi-departure',
+                    'taxi-destination': 'taxi-destination',
+                    'taxi-leaveat': "taxi-leaveAt",
+                    'train-arriveby': "train-arriveBy",
+                    'train-book people': "train-book_people",
+                    'train-day': 'train-day',
+                    'train-departure': "train-departure",
+                    'train-destination': "train-destination",
+                    'train-leaveat': "train-leaveAt"}
 
     def convert_turn_label(turn_label):
         new_turn_label = {}
-        for slot,value in turn_label:
-            if(slot in DOMAIN_ALIGN):
+        for slot, value in turn_label:
+            if (slot in DOMAIN_ALIGN):
                 slot = DOMAIN_ALIGN[slot]
                 new_turn_label[slot] = value
         return new_turn_label
-
 
     sys_inform_dict = load_acts(acts_file)
     with open(input_file, "r", encoding='utf-8') as reader:
@@ -615,40 +633,100 @@ def create_aug_examples(input_file, acts_file, set_type, slot_list,
     print(aug_file)
     with open(aug_file) as f:
         aug_dials = json.load(f)
+
+    def get_CoCo_dialID_set(subset_dialog_file):
+
+        with open(subset_dialog_file, "r", encoding='utf-8') as reader:
+            subset_dialog = json.load(reader)
+
+        CoCo_dialIDs = set()
+        for turn_meta_data in subset_dialog:
+            CoCo_dialIDs.add(turn_meta_data["dialogue_idx"])
+
+        return CoCo_dialIDs
+
+    # import pdb;
+    # pdb.set_trace()
+    if (subset_dialog_file):
+        CoCo_dialIDs = get_CoCo_dialID_set(subset_dialog_file)
+    else:
+        CoCo_dialIDs = set()
+
     for dial_dict in tqdm(train_data):
         dialog_id = dial_dict["dialogue_idx"]
-        for turn_id, turn in enumerate(dial_dict["dialogue"]):
-            if(dialog_id not in input_data):
-                continue
-            key = (dialog_id+str(turn_id))
-            if(key in aug_dials and aug_dials[key]["success"]):
-                accu_examples = create_GUI_examples(input_data,dialog_id, turn_id,aug_dials[key]["new_utter"], convert_turn_label(aug_dials[key]["new_turn_label"]),
-                    sys_inform_dict, set_type, slot_list,label_maps=label_maps, append_history=append_history, use_history_labels=use_history_labels,
-                    swap_utterances=swap_utterances,label_value_repetitions=label_value_repetitions, delexicalize_sys_utts=delexicalize_sys_utts,
-                    analyze=analyze)
-            else:
-                accu_examples = create_GUI_examples(input_data,dialog_id, turn_id,turn["transcript"],convert_turn_label(turn["turn_label"]),sys_inform_dict, 
-                set_type, slot_list,label_maps=label_maps, append_history=append_history, use_history_labels=use_history_labels,
-                swap_utterances=swap_utterances,label_value_repetitions=label_value_repetitions, delexicalize_sys_utts=delexicalize_sys_utts,
-                analyze=analyze)
-            examples.append(accu_examples[-1])
+        if CoCo_dialIDs and (dialog_id not in CoCo_dialIDs):
+            continue
 
+        if (dialog_id not in input_data):
+            continue
+
+        for turn_id, turn in enumerate(dial_dict["dialogue"]):
+
+            key = (dialog_id + str(turn_id))
+            if (key in aug_dials):
+                assert type(aug_dials[key]) == dict or type(aug_dials[key] == list)
+                if (type(aug_dials[key]) == dict):
+                    if (aug_dials[key]["success"]):
+                        accu_examples = create_GUI_examples(input_data, dialog_id, turn_id, aug_dials[key]["new_utter"],
+                                                            convert_turn_label(aug_dials[key]["new_turn_label"]),
+                                                            sys_inform_dict, set_type, slot_list, label_maps=label_maps,
+                                                            append_history=append_history,
+                                                            use_history_labels=use_history_labels,
+                                                            swap_utterances=swap_utterances,
+                                                            label_value_repetitions=label_value_repetitions,
+                                                            delexicalize_sys_utts=delexicalize_sys_utts,
+                                                            analyze=analyze)
+                    else:
+                        accu_examples = create_GUI_examples(input_data, dialog_id, turn_id, turn["transcript"],
+                                                            convert_turn_label(turn["turn_label"]), sys_inform_dict,
+                                                            set_type, slot_list, label_maps=label_maps,
+                                                            append_history=append_history,
+                                                            use_history_labels=use_history_labels,
+                                                            swap_utterances=swap_utterances,
+                                                            label_value_repetitions=label_value_repetitions,
+                                                            delexicalize_sys_utts=delexicalize_sys_utts,
+                                                            analyze=analyze)
+                    examples.append(accu_examples[-1])
+                else:
+                    for element in aug_dials[key]:
+                        if (element["success"]):
+                            accu_examples = create_GUI_examples(input_data, dialog_id, turn_id, element["new_utter"],
+                                                                convert_turn_label(element["new_turn_label"]),
+                                                                sys_inform_dict, set_type, slot_list,
+                                                                label_maps=label_maps, append_history=append_history,
+                                                                use_history_labels=use_history_labels,
+                                                                swap_utterances=swap_utterances,
+                                                                label_value_repetitions=label_value_repetitions,
+                                                                delexicalize_sys_utts=delexicalize_sys_utts,
+                                                                analyze=analyze)
+                        else:
+                            accu_examples = create_GUI_examples(input_data, dialog_id, turn_id, turn["transcript"],
+                                                                convert_turn_label(turn["turn_label"]), sys_inform_dict,
+                                                                set_type, slot_list, label_maps=label_maps,
+                                                                append_history=append_history,
+                                                                use_history_labels=use_history_labels,
+                                                                swap_utterances=swap_utterances,
+                                                                label_value_repetitions=label_value_repetitions,
+                                                                delexicalize_sys_utts=delexicalize_sys_utts,
+                                                                analyze=analyze)
+                        examples.append(accu_examples[-1])
+
+            # if(len(examples)>50):
+            #     import pdb;
+            #     pdb.set_trace()
+    print(len(examples), " in total during training!")
     return examples
 
 
-
-
-
-
-def create_GUI_examples(input_data,dialog_id, turn_id,new_usr_utter,new_turn_label,sys_inform_dict, set_type, slot_list,
-                    label_maps={},
-                    append_history=False,
-                    use_history_labels=False,
-                    swap_utterances=False,
-                    label_value_repetitions=False,
-                    delexicalize_sys_utts=False,
-                    analyze=False):
-
+def create_GUI_examples(input_data, dialog_id, turn_id, new_usr_utter, new_turn_label, sys_inform_dict, set_type,
+                        slot_list,
+                        label_maps={},
+                        append_history=False,
+                        use_history_labels=False,
+                        swap_utterances=False,
+                        label_value_repetitions=False,
+                        delexicalize_sys_utts=False,
+                        analyze=False):
     global LABEL_MAPS
     LABEL_MAPS = label_maps
 
@@ -685,29 +763,29 @@ def create_GUI_examples(input_data,dialog_id, turn_id,new_usr_utter,new_turn_lab
             for slot in slot_list:
                 if (str(dialog_id), str(turn_itr), slot) in sys_inform_dict:
                     inform_dict[slot] = sys_inform_dict[(str(dialog_id), str(turn_itr), slot)]
-            utt_tok_list.append(delex_utt(utt['text'], inform_dict)) # normalize utterances
-        elif((2*turn_id+1) != len(utt_tok_list)):
-            utt_tok_list.append(tokenize(utt['text'])) # normalize utterances
+            utt_tok_list.append(delex_utt(utt['text'], inform_dict))  # normalize utterances
+        elif ((2 * turn_id + 1) != len(utt_tok_list)):
+            utt_tok_list.append(tokenize(utt['text']))  # normalize utterances
         else:
-            #print(new_usr_utter)
-            utt_tok_list.append(tokenize(new_usr_utter)) # normalize utterances
+            # print(new_usr_utter)
+            utt_tok_list.append(tokenize(new_usr_utter))  # normalize utterances
 
         modified_slots = {}
 
         # If sys utt, extract metadata (identify and collect modified slots)
-        if is_sys_utt and ((2*turn_id+3) > len(utt_tok_list)):
+        if is_sys_utt and ((2 * turn_id + 3) > len(utt_tok_list)):
             for d in utt['metadata']:
                 booked = utt['metadata'][d]['book']['booked']
                 booked_slots = {}
                 # Check the booked section
                 if booked != []:
                     for s in booked[0]:
-                        booked_slots[s] = normalize_label('%s-%s' % (d, s), booked[0][s]) # normalize labels
+                        booked_slots[s] = normalize_label('%s-%s' % (d, s), booked[0][s])  # normalize labels
                 # Check the semi and the inform slots
                 for category in ['book', 'semi']:
                     for s in utt['metadata'][d][category]:
                         cs = '%s-book_%s' % (d, s) if category == 'book' else '%s-%s' % (d, s)
-                        value_label = normalize_label(cs, utt['metadata'][d][category][s]) # normalize labels
+                        value_label = normalize_label(cs, utt['metadata'][d][category][s])  # normalize labels
                         # Prefer the slot value as stored in the booked section
                         if s in booked_slots:
                             value_label = booked_slots[s]
@@ -716,13 +794,13 @@ def create_GUI_examples(input_data,dialog_id, turn_id,new_usr_utter,new_turn_lab
                             modified_slots[cs] = value_label
                             cumulative_labels[cs] = value_label
         elif is_sys_utt:
-            for slot,value in new_turn_label.items():
-                new_value = normalize_label(slot,value) # normalize labels
+            for slot, value in new_turn_label.items():
+                new_value = normalize_label(slot, value)  # normalize labels
                 modified_slots[slot] = new_value
 
         mod_slots_list.append(modified_slots.copy())
 
-        if((2*turn_id+3)==len(utt_tok_list)):
+        if ((2 * turn_id + 3) == len(utt_tok_list)):
             break
     # Form proper (usr, sys) turns
     # import pdb;
@@ -735,8 +813,8 @@ def create_GUI_examples(input_data,dialog_id, turn_id,new_usr_utter,new_turn_lab
     usr_utt_tok = []
     hst_utt_tok = []
     hst_utt_tok_label_dict = {slot: [] for slot in slot_list}
-    #print("--------------------------------")
-    for i in range(1, len(utt_tok_list)-1, 2):
+    # print("--------------------------------")
+    for i in range(1, len(utt_tok_list) - 1, 2):
         sys_utt_tok_label_dict = {}
         usr_utt_tok_label_dict = {}
         value_dict = {}
@@ -754,9 +832,9 @@ def create_GUI_examples(input_data,dialog_id, turn_id,new_usr_utter,new_turn_lab
         sys_utt_tok = utt_tok_list[i - 1]
         usr_utt_tok = utt_tok_list[i]
         turn_slots = mod_slots_list[i + 1]
-        #print("system: "," ".join(sys_utt_tok))
-        #print("user: "," ".join(usr_utt_tok))
-        #print("turn_label: ",turn_slots)
+        # print("system: "," ".join(sys_utt_tok))
+        # print("user: "," ".join(usr_utt_tok))
+        # print("turn_label: ",turn_slots)
         guid = '%s-%s-%s' % (set_type, str(dialog_id), str(turn_itr))
 
         if analyze:
@@ -780,9 +858,11 @@ def create_GUI_examples(input_data,dialog_id, turn_id,new_usr_utter,new_turn_lab
             # Get dialog act annotations
             inform_label = list(['none'])
             if (str(dialog_id), str(turn_itr), slot) in sys_inform_dict:
-                inform_label = list([normalize_label(slot, i) for i in sys_inform_dict[(str(dialog_id), str(turn_itr), slot)]])
+                inform_label = list(
+                    [normalize_label(slot, i) for i in sys_inform_dict[(str(dialog_id), str(turn_itr), slot)]])
             elif (str(dialog_id), str(turn_itr), 'booking-' + slot.split('-')[1]) in sys_inform_dict:
-                inform_label = list([normalize_label(slot, i) for i in sys_inform_dict[(str(dialog_id), str(turn_itr), 'booking-' + slot.split('-')[1])]])
+                inform_label = list([normalize_label(slot, i) for i in
+                                     sys_inform_dict[(str(dialog_id), str(turn_itr), 'booking-' + slot.split('-')[1])]])
 
             (informed_value,
              referred_slot,
@@ -818,12 +898,15 @@ def create_GUI_examples(input_data,dialog_id, turn_id,new_usr_utter,new_turn_lab
             if append_history:
                 if use_history_labels:
                     if swap_utterances:
-                        new_hst_utt_tok_label_dict[slot] = usr_utt_tok_label + sys_utt_tok_label + new_hst_utt_tok_label_dict[slot]
+                        new_hst_utt_tok_label_dict[slot] = usr_utt_tok_label + sys_utt_tok_label + \
+                                                           new_hst_utt_tok_label_dict[slot]
                     else:
-                        new_hst_utt_tok_label_dict[slot] = sys_utt_tok_label + usr_utt_tok_label + new_hst_utt_tok_label_dict[slot]
+                        new_hst_utt_tok_label_dict[slot] = sys_utt_tok_label + usr_utt_tok_label + \
+                                                           new_hst_utt_tok_label_dict[slot]
                 else:
-                    new_hst_utt_tok_label_dict[slot] = [0 for _ in sys_utt_tok_label + usr_utt_tok_label + new_hst_utt_tok_label_dict[slot]]
-                
+                    new_hst_utt_tok_label_dict[slot] = [0 for _ in sys_utt_tok_label + usr_utt_tok_label +
+                                                        new_hst_utt_tok_label_dict[slot]]
+
             # For now, we map all occurences of unpointable slot values
             # to none. However, since the labels will still suggest
             # a presence of unpointable slot values, the task of the
@@ -835,7 +918,8 @@ def create_GUI_examples(input_data,dialog_id, turn_id,new_usr_utter,new_turn_lab
                 if analyze:
                     if slot not in diag_seen_slots_dict or value_label != diag_seen_slots_value_dict[slot]:
                         print("(%s): %s, " % (slot, value_label), end='')
-            elif slot in diag_seen_slots_dict and class_type == diag_seen_slots_dict[slot] and class_type != 'copy_value' and class_type != 'inform':
+            elif slot in diag_seen_slots_dict and class_type == diag_seen_slots_dict[
+                slot] and class_type != 'copy_value' and class_type != 'inform':
                 # If slot has seen before and its class type did not change, label this slot a not present,
                 # assuming that the slot has not actually been mentioned in this turn.
                 # Exceptions are copy_value and inform. If a seen slot has been tagged as copy_value or inform,
@@ -870,7 +954,6 @@ def create_GUI_examples(input_data,dialog_id, turn_id,new_usr_utter,new_turn_lab
             txt_a_lbl = sys_utt_tok_label_dict
             txt_b_lbl = usr_utt_tok_label_dict
 
-            
         examples.append(DSTExample(
             guid=guid,
             text_a=txt_a,
@@ -886,19 +969,14 @@ def create_GUI_examples(input_data,dialog_id, turn_id,new_usr_utter,new_turn_lab
             diag_state=diag_state,
             class_label=class_type_dict))
 
-
         # Update some variables.
         hst_utt_tok_label_dict = new_hst_utt_tok_label_dict.copy()
         diag_state = new_diag_state.copy()
-        if(turn_id==turn_itr):
+        if (turn_id == turn_itr):
             break
         turn_itr += 1
 
     if analyze:
         print("----------------------------------------------------------------------")
-    #print("--------------------------------")
 
     return examples
-
-
-

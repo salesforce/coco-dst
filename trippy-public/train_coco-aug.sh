@@ -2,15 +2,16 @@ export CUDA_VISIBLE_DEVICES=0
 TASK="multiwoz21"
 DATA_DIR="data/MULTIWOZ2.1"
 
-
 # Project paths etc. ----------------------------------------------
-aug_file="../coco-dst/coco_data/coco-vs_rare_out_domain_train_classifier_change_add-2-max-3_drop-1_seed_0.json"
-OUT_DIR=coco-vs_rare
+root="../coco-dst/coco_data/"
+aug_file=${root}"8times_coco-vs_rare_out_domain_train_classifier_change_add-2-max-3_drop-1_seed_0.json"
+subset_dialog_file=""
+OUT_DIR=coco-vs_rare_8times
 if [ ! -d "${OUT_DIR}" ]; then
   mkdir -p ${OUT_DIR}
 fi
 # Main ------------------------------------------------------------
-
+#
 for step in train dev test; do
     args_add=""
     if [ "$step" = "train" ]; then
@@ -26,6 +27,7 @@ for step in train dev test; do
 	    --model_type="bert" \
 	    --model_name_or_path="bert-base-uncased" \
 	    --do_lower_case \
+	    --subset_dialog_file=${subset_dialog_file} \
 	    --aug_file=${aug_file} \
 	    --learning_rate=1e-4 \
 	    --num_train_epochs=10 \

@@ -24,26 +24,23 @@ Then, you can simply evaluate the desired TripPy model checkpoint on CoCo-genera
 after setting the required arguments as instructed under section ```Run Evaluation on CoCo Examples``` in 
 ```../coco-dst/README.md```.
 
-## Re-Train with CoCo-generated data
+
+## Re-Train with Multi Round CoCo Augmentation
 Before running the re-training script, make sure that 
-- You generated the data using CoCo for re-training (see further details under section 
-```CoCo+ as data augmentation defense``` in ```../coco-dst/README.md```.
+- You generated the data using multi-round augmentation with CoCo for re-training (see further details under section 
+```CoCo+ multiple round data augmentation``` in ```../coco-dst/README.md``` of this branch.
 - You moved the data for re-training into ```../coco-dst/coco_data```.  
 
 Then, run
 ```console
 ❱❱❱ sh train_coco-aug.sh
 ```
-After training the model, modify ```MODEL_CHECKPOINT``` in line 50 of ```interface4eval_trippy.py``` to the path of 
-your checkpoint you want to do evaluation. You can also [**download**](https://storage.cloud.google.com/sfr-coco-dst-research/trippy-public-resources/coco-vs_rare.zip) 
-the re-trained checkpoint we used in our paper.
+after setting ```aug_file``` to the path of the retraining data. By default, it points to the 8x CoCo augmentation file 
+that you can [**download**](https://storage.cloud.google.com/sfr-coco-dst-research/coco-dst-resources/coco_data.zip).
 
-Then, you can simply re-evaluate TripPy on CoCo-generated examples by running
-```console
-❱❱❱ sh run_eval.sh
-```
-after setting the required arguments as instructed under section ```Run Evaluation on CoCo Examples``` in 
-```../coco-dst/README.md```.
+You can also [**download**](https://storage.cloud.google.com/sfr-coco-dst-research/trippy-public-resources/coco-vs_rare_8times.zip) 
+the checkpoint we retrained with 8x augmentation reported in our paper. 
+
 
 ## License
 The code is released under the Apache License - see [LICENSE](LICENSE.txt) for details

@@ -5,7 +5,6 @@
  For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 """
 
-
 import argparse
 import glob
 import logging
@@ -415,7 +414,9 @@ def main():
     # Training
     if args.do_train:
         train_dataset = MultiWOZForT5(args.max_src_len, args.max_tgt_len, args.train_data_file, tokenizer,
-                                      args.shuffle_turn_label)
+                                      args.shuffle_turn_label, args.train_data_ratio)
+        with open(args.output_dir + '/train_data.json', 'w') as outfile:
+            json.dump(train_dataset.data, outfile, indent=4)
         global_step, train_loss = train(args, train_dataset, model, tokenizer)
         logger.info(" global_step = {}, average loss = {}".format(global_step, train_loss))
 
