@@ -32,12 +32,13 @@ ONTOLOGY = {
 
 class MultiWOZForT5(Dataset):
 
-    def __init__(self, max_src_len, max_tgt_len, data_dir, tokenizer, shuffle_turn_label, data_ratio):
+    def __init__(self, max_src_len, max_tgt_len, data_dir, tokenizer, shuffle_turn_label, data_ratio=1.0):
 
         self.tokenizer = tokenizer
         self.max_src_len = max_src_len
         self.max_tgt_len = max_tgt_len
         self.shuffle_turn_label = shuffle_turn_label
+        self.data_ratio = data_ratio
         self.data = self.load_data(data_dir, data_ratio)
 
     def __getitem__(self, idx):
